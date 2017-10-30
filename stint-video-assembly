@@ -3,6 +3,27 @@
 require 'yaml'
 require 'optparse'
 
+class Hash
+  def stringify_keys
+    out = {}
+    each do |k, v|
+      out[k.to_s] = v
+    end
+    out
+  end
+  
+  def deep_stringify_keys
+    out = {}
+    each do |k, v|
+      if v.is_a?(Hash)
+        v = v.deep_stringify_keys
+      end
+      out[k.to_s] = v
+    end
+    out
+  end
+end
+
 options = {}
 
 OptionParser.new do |opts|
@@ -15,9 +36,9 @@ def video_file?(path)
   %w(mov mkv).include?(path.sub(/.*\./, '').downcase)
 end
 
-size_cache = {}
+$size_cache = {}
 def cached_file_size(path)
-  size_cache[path] ||= File.stat(path).st_size
+  $size_cache[path] ||= File.stat(path).size
 end
 
 def size_reasonable?(path)
@@ -36,7 +57,7 @@ class SkeletonGenerator
 
     Dir["#{root}/*"].sort.each do |path|
       filename = File.basename(path)
-      if video_file?(filename)
+      if video_file?(filename) && size_reasonable?(path)
         skeleton[filename] = {
           split: nil,
           join: nil,
@@ -54,5 +75,7 @@ class SkeletonGenerator
 end
 
 if options[:skeleton]
-  puts YAML.dump(SkeletonGenerator.new(Dir.cwd).generate)
+  payload = SkeletonGenerator.new(Dir.pwd).generate.deep_stringify_keys
+  puts YAML.dump(payload)
+  exit
 end
