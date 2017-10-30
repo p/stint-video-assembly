@@ -15,8 +15,13 @@ def video_file?(path)
   %w(mov mkv).include?(path.sub(/.*\./, '').downcase)
 end
 
+size_cache = {}
+def cached_file_size(path)
+  size_cache[path] ||= File.stat(path).st_size
+end
+
 def size_reasonable?(path)
-  File.stat(path).st_size > 50_000_000
+  cached_file_size(path) > 50_000_000
 end
 
 class SkeletonGenerator
@@ -44,7 +49,7 @@ class SkeletonGenerator
   end
   
   private def human_size(path)
-    (File.stat(path).st_size / 1024 / 1024).round.to_s + ' MB'
+    (cached_file_size(path) / 1024 / 1024).round.to_s + ' MB'
   end
 end
 
