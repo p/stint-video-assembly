@@ -1,0 +1,53 @@
+#!/usr/bin/env ruby
+
+require 'yaml'
+require 'optparse'
+
+options = {}
+
+OptionParser.new do |opts|
+  opts.on('-s', '--skeleton', 'Create a skeleton configuration file') do
+    options[:skeleton] = true
+  end
+end.parse!
+
+def video_file?(path)
+  %w(mov mkv).include?(path.sub(/.*\./, '').downcase)
+end
+
+def size_reasonable?(path)
+  File.stat(path).st_size > 50_000_000
+end
+
+class SkeletonGenerator
+  attr_reader :root
+  
+  def initialize(root)
+    @root = root
+  end
+  
+  def generate
+    skeleton = {}
+
+    Dir["#{root}/*"].sort.each do |path|
+      filename = File.basename(path)
+      if video_file?(filename)
+        skeleton[filename] = {
+          split: nil,
+          join: nil,
+          size: human_size(path),
+        }
+      end
+    end
+    
+    skeleton
+  end
+  
+  private def human_size(path)
+    (File.stat(path).st_size / 1024 / 1024).round.to_s + ' MB'
+  end
+end
+
+if options[:skeleton]
+  puts YAML.dump(SkeletonGenerator.new(Dir.cwd).generate)
+end
