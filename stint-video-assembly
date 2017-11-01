@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'open3'
 require 'yaml'
 require 'optparse'
 
@@ -74,8 +75,105 @@ class SkeletonGenerator
   end
 end
 
-if options[:skeleton]
-  payload = SkeletonGenerator.new(Dir.pwd).generate.deep_stringify_keys
-  puts YAML.dump(payload)
-  exit
+class Splitter
+  def initialize(config)
+    @config = config
+  end
+  
+  attr_reader :config
+  
+  def run
+    config.each do |filename, subconfig|
+      splits = subconfig['split']
+      if splits == 'none'
+        puts "Ignore #{filename}"
+        next
+      end
+      
+      if splits.is_a?(Hash) && splits.size == 1 && splits.values == [nil]
+        splits = splits.keys.first
+      end
+      
+      if splits.is_a?(String)
+        # single split, do we need to change file format?
+        if splits =~ /-p\d+$/ || splits.include?('.')
+          # yes
+          splits = {splits => {}}
+        else
+          new_name = make_new_name(filename, splits)
+          puts "Rename #{filename} -> #{new_name}"
+          next
+        end
+      end
+      
+      splits.each do |target, split_config|
+        if split_config == {}
+          # format conversion only
+          new_name = make_new_name(filename, target, 'mkv')
+          puts "Convert all #{filename} -> #{new_name}"
+        else
+          # ranged conversion
+          info = FfProbe.new(filename)
+          p info.length
+        end
+        p split_config
+      end
+      
+      p filename
+    end
+  end
+  
+  private def make_new_name(filename, target, new_ext=nil)
+    if target.include?('.')
+      target
+    else
+      if new_ext.nil?
+        unless filename =~ /\.(\w+)$/
+          raise "Can't figure out the extension for #{filename}"
+        end
+        new_ext = $1.downcase
+      end
+      "#{target}.#{new_ext}"
+    end
+  end
+end
+
+module Utils
+  module_function def duration_to_length(duration)
+    unless duration =~ /^(((\d+):)?(\d+):)?(\d+)(\.\d+)$/
+      raise "Bad duration format: #{duration}"
+    end
+    
+    h, m, s, ms = $3, $4, $5, $6
+    h.to_i * 3600 + m.to_i * 60 + s.to_i + "0#{ms}".to_f
+  end
+end
+
+class FfProbe
+  def initialize(path)
+    _, @output, status = Open3.capture3('ffprobe', path)
+    if status.exitstatus != 0
+      raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
+    end
+  end
+  
+  def length
+    unless @output =~ /Duration: ([\d:.]+)/
+      raise "Cannot find duration in output"
+    end
+    
+    Utils.duration_to_length($1)
+  end
+end
+
+if File.basename($0) == File.basename(__FILE__)
+  if options[:skeleton]
+    payload = SkeletonGenerator.new(Dir.pwd).generate.deep_stringify_keys
+    puts YAML.dump(payload)
+    exit
+  end
+
+  config = YAML.load(File.open(ARGV.first).read)
+
+  Splitter.new(config).run
 end
