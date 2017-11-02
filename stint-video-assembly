@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'json'
 require 'open3'
 require 'yaml'
 require 'optparse'
@@ -151,18 +152,16 @@ end
 
 class FfProbe
   def initialize(path)
-    _, @output, status = Open3.capture3('ffprobe', path)
+    output, status = Open3.capture2('ffprobe', '-v', 'quiet',
+      '-print_format', 'json', '-show_format', path)
     if status.exitstatus != 0
       raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
     end
+    @info = JSON.parse(output)
   end
   
   def length
-    unless @output =~ /Duration: ([\d:.]+)/
-      raise "Cannot find duration in output"
-    end
-    
-    Utils.duration_to_length($1)
+    @info['format']['duration'].to_f
   end
 end
 
