@@ -154,10 +154,14 @@ class FfProbe
   def initialize(path)
     output, status = Open3.capture2('ffprobe', '-v', 'quiet',
       '-print_format', 'json', '-show_format', path)
-    if status.exitstatus != 0
-      raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
+    begin
+      if status.exitstatus != 0
+        raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
+      end
+      @info = JSON.parse(output)
+    ensure
+      output.close
     end
-    @info = JSON.parse(output)
   end
   
   def length
