@@ -1,5 +1,18 @@
 #!/usr/bin/env ruby
 
+# Smartycam puts a keyframe in every second at the second.
+# May be using 30 fps to make this work.
+# This means as long as I am splitting & joining videos on whole seconds
+# I should be splitting and joining on keyframes.
+#
+# ffprobe info: https://stackoverflow.com/questions/11400248/using-ffmpeg-to-get-video-info-why-do-i-need-to-specify-an-output-file
+#
+# ffmpeg video cutting:
+# https://stackoverflow.com/questions/43890/crop-mp3-to-first-30-seconds
+# https://superuser.com/questions/138331/using-ffmpeg-to-cut-up-video#704118
+# http://trac.ffmpeg.org/wiki/Seeking
+# https://superuser.com/questions/554620/how-to-get-time-stamp-of-closest-keyframe-before-a-given-timestamp-with-ffmpeg#554679
+
 require 'byebug'
 require 'json'
 require 'open3'
@@ -110,6 +123,7 @@ class Splitter
   attr_reader :config
   
   def run
+    plan = []
     config.each do |filename, subconfig|
       splits = subconfig['split']
       if splits == 'none'
@@ -128,7 +142,8 @@ class Splitter
           splits = {splits => {}}
         else
           new_name = make_new_name(filename, splits)
-          puts "Rename #{filename} -> #{new_name}"
+          puts "Copy #{filename} -> #{new_name}"
+          plan << ['cp', filename, new_name]
           next
         end
       end
@@ -138,18 +153,39 @@ class Splitter
           # format conversion only
           new_name = make_new_name(filename, target, 'mkv')
           puts "Convert all #{filename} -> #{new_name}"
+          plan << ['ffmpeg', '-i', filename, '-c', 'copy', new_name]
         else
+          puts "Split #{filename} -> #{target}"
           # ranged conversion
-          info = FfProbe.new(filename)
-          p info.length
-          p info.key_frame_times
-          byebug
-          x
+          #info = FfProbe.new(filename)
+          pre_opts = []
+          post_opts = []
+          if split_config['start']
+            pre_opts += ['-ss', split_config['start'].to_s]
+          end
+          if split_config['end']
+            post_opts += ['-to', split_config['end'].to_s]
+          end
+          args = pre_opts + ['-i', filename] + post_opts
+          target_path = make_new_name(filename, target, 'mkv')
+          cmd = ['ffmpeg'] + args + ['-c', 'copy', target_path]
+          plan << cmd
+          #p cmd
+          #x
         end
-        p split_config
+        #p split_config
       end
       
-      p filename
+      #p filename, plan
+    end
+    p plan
+    
+    plan.each do |cmd|
+      pid = fork do
+        puts "Executing #{cmd.join(' ')}"
+        exec(*cmd)
+      end
+      Process.waitpid(pid)
     end
   end
   
