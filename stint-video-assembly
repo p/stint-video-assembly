@@ -14,6 +14,7 @@
 # https://superuser.com/questions/554620/how-to-get-time-stamp-of-closest-keyframe-before-a-given-timestamp-with-ffmpeg#554679
 
 require 'byebug'
+require 'tempfile'
 require 'json'
 require 'open3'
 require 'yaml'
@@ -124,6 +125,8 @@ class Splitter
   
   def run
     plan = []
+    groups = {}
+    
     config.each do |filename, subconfig|
       splits = subconfig['split']
       if splits == 'none'
@@ -170,22 +173,28 @@ class Splitter
           target_path = make_new_name(filename, target, 'mkv')
           cmd = ['ffmpeg'] + args + ['-c', 'copy', target_path]
           plan << cmd
-          #p cmd
-          #x
+          
+          group_name = target.sub(/-p\d+(\.\w+)?$/, '')
+          groups[group_name] ||= []
+          groups[group_name] << target_path
         end
-        #p split_config
       end
-      
-      #p filename, plan
     end
-    p plan
     
     plan.each do |cmd|
-      pid = fork do
-        puts "Executing #{cmd.join(' ')}"
-        exec(*cmd)
+      execute(cmd)
+    end
+    
+    groups.each do |group_name, paths|
+      target_path = make_new_name(paths.first, group_name)
+      Tempfile.open('stint-video-assembly') do |f|
+        paths.each do |path|
+          f << "file '#{path}\n"
+        end
+        f.sync
+        cmd = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', f.path, '-c', 'copy', target_path]
+        execute(cmd)
       end
-      Process.waitpid(pid)
     end
   end
   
@@ -201,6 +210,14 @@ class Splitter
       end
       "#{target}.#{new_ext}"
     end
+  end
+  
+  private def execute(cmd)
+    pid = fork do
+      puts "Executing #{cmd.join(' ')}"
+      exec(*cmd)
+    end
+    Process.waitpid(pid)
   end
 end
 
