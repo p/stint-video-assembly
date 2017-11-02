@@ -126,7 +126,7 @@ class Splitter
   
   def run
     plan = []
-    groups = {}
+    @groups = {}
     
     config.each do |filename, subconfig|
       splits = subconfig['split']
@@ -148,6 +148,7 @@ class Splitter
           new_name = make_new_name(filename, splits)
           puts "Copy #{filename} -> #{new_name}"
           plan << ['cp', filename, new_name]
+          group(new_name)
           next
         end
       end
@@ -159,6 +160,7 @@ class Splitter
           puts "Convert all #{filename} -> #{new_name}"
           FileUtils.rm_f(new_name)
           plan << ['ffmpeg', '-i', filename, '-c', 'copy', new_name]
+          group(new_name)
         else
           puts "Split #{filename} -> #{target}"
           # ranged conversion
@@ -177,9 +179,7 @@ class Splitter
           cmd = ['ffmpeg'] + args + ['-c', 'copy', target_path]
           plan << cmd
           
-          group_name = target.sub(/-p\d+(\.\w+)?$/, '')
-          groups[group_name] ||= []
-          groups[group_name] << target_path
+          group(target_path)
         end
       end
     end
@@ -187,18 +187,28 @@ class Splitter
     plan.each do |cmd|
       execute(cmd)
     end
-    
-    groups.each do |group_name, paths|
+
+    @groups.each do |group_name, paths|
+      next if paths.size <= 1
       target_path = make_new_name(paths.first, group_name)
       Tempfile.open('stint-video-assembly') do |f|
         paths.each do |path|
-          f << "file '#{path}\n"
+          f << "file '#{File.realpath(path)}'\n"
         end
-        f.sync
+        f.flush
         FileUtils.rm_f(target_path)
         cmd = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', f.path, '-c', 'copy', target_path]
+        #execute(['cat',f.path])
         execute(cmd)
       end
+    end
+  end
+  
+  private def group(path)
+    group_name = path.sub(/-p\d+(\.\w+)?$/, '')
+    if group_name != path
+      @groups[group_name] ||= []
+      @groups[group_name] << path
     end
   end
   
