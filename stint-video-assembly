@@ -152,20 +152,34 @@ end
 
 class FfProbe
   def initialize(path)
-    output, status = Open3.capture2('ffprobe', '-v', 'quiet',
-      '-print_format', 'json', '-show_format', path)
-    begin
-      if status.exitstatus != 0
-        raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
+    @path = path
+  end
+  
+  attr_reader :path
+  
+  private def info
+    @info ||= begin
+      output, status = Open3.capture2('ffprobe', '-v', 'quiet',
+        '-print_format', 'json', '-show_format', path)
+      begin
+        if status.exitstatus != 0
+          raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
+        end
+        JSON.parse(output)
+      ensure
+        output.close
       end
-      @info = JSON.parse(output)
-    ensure
-      output.close
     end
   end
   
   def length
-    @info['format']['duration'].to_f
+    info['format']['duration'].to_f
+  end
+  
+  private def keyframes
+  end
+  
+  private def get_output(*cmd)
   end
 end
 
