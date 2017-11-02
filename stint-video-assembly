@@ -201,7 +201,7 @@ class FfProbe
       info = JSON.parse(get_output(
         'ffprobe', '-v', 'quiet', '-print_format', 'json',
         path,
-        '-select_streams', 'v', '-show_frames', '-show_entries', 'frame=pkts_pts_time,pict_type'))
+        '-select_streams', 'v', '-show_frames', '-show_entries', 'frame=pkt_pts_time,pict_type'))
       info = info['frames']
       key_frame_times = []
       info.each do |frame_info|
