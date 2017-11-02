@@ -15,6 +15,7 @@
 
 require 'byebug'
 require 'tempfile'
+require 'fileutils'
 require 'json'
 require 'open3'
 require 'yaml'
@@ -156,6 +157,7 @@ class Splitter
           # format conversion only
           new_name = make_new_name(filename, target, 'mkv')
           puts "Convert all #{filename} -> #{new_name}"
+          FileUtils.rm_f(new_name)
           plan << ['ffmpeg', '-i', filename, '-c', 'copy', new_name]
         else
           puts "Split #{filename} -> #{target}"
@@ -171,6 +173,7 @@ class Splitter
           end
           args = pre_opts + ['-i', filename] + post_opts
           target_path = make_new_name(filename, target, 'mkv')
+          FileUtils.rm_f(target_path)
           cmd = ['ffmpeg'] + args + ['-c', 'copy', target_path]
           plan << cmd
           
@@ -192,6 +195,7 @@ class Splitter
           f << "file '#{path}\n"
         end
         f.sync
+        FileUtils.rm_f(target_path)
         cmd = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', f.path, '-c', 'copy', target_path]
         execute(cmd)
       end
