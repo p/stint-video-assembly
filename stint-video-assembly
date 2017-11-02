@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'byebug'
 require 'json'
 require 'open3'
 require 'yaml'
@@ -116,6 +117,9 @@ class Splitter
           # ranged conversion
           info = FfProbe.new(filename)
           p info.length
+          p info.key_frame_times
+          byebug
+          x
         end
         p split_config
       end
@@ -158,28 +162,38 @@ class FfProbe
   attr_reader :path
   
   private def info
-    @info ||= begin
-      output, status = Open3.capture2('ffprobe', '-v', 'quiet',
-        '-print_format', 'json', '-show_format', path)
-      begin
-        if status.exitstatus != 0
-          raise "Command failed: ffprobe #{path}: #{status.exitstatus}"
-        end
-        JSON.parse(output)
-      ensure
-        output.close
-      end
-    end
+    @info ||= JSON.parse(get_output(
+      'ffprobe', '-v', 'quiet', '-print_format', 'json',
+      '-show_format', path))
   end
   
   def length
     info['format']['duration'].to_f
   end
   
-  private def keyframes
+  def key_frame_times
+    @key_frame_times ||= begin
+      info = JSON.parse(get_output(
+        'ffprobe', '-v', 'quiet', '-print_format', 'json',
+        path,
+        '-select_streams', 'v', '-show_frames', '-show_entries', 'frame=pkts_pts_time,pict_type'))
+      info = info['frames']
+      key_frame_times = []
+      info.each do |frame_info|
+        if frame_info['pict_type'] == 'I'
+          key_frame_times << frame_info['pkt_pts_time'].to_f
+        end
+      end
+      key_frame_times
+    end
   end
   
   private def get_output(*cmd)
+    output, status = Open3.capture2(*cmd)
+    if status.exitstatus != 0
+      raise "Command failed: #{cmd.join(' ')}: #{status.exitstatus}"
+    end
+    output
   end
 end
 
