@@ -33,6 +33,10 @@ OptionParser.new do |opts|
   opts.on('-s', '--skeleton', 'Create a skeleton configuration file') do
     options[:skeleton] = true
   end
+  
+  opts.on('-b', '--build-meta', 'Build video meta info') do
+    options[:build_meta] = true
+  end
 end.parse!
 
 def video_file?(path)
@@ -48,25 +52,35 @@ def size_reasonable?(path)
   cached_file_size(path) > 50_000_000
 end
 
-class SkeletonGenerator
+class Generator
   attr_reader :root
   
   def initialize(root)
     @root = root
   end
   
-  def generate
-    skeleton = {}
-
+  private def video_file_paths
+    paths = []
     Dir["#{root}/*"].sort.each do |path|
       filename = File.basename(path)
       if video_file?(filename) && size_reasonable?(path)
-        skeleton[filename] = {
-          split: nil,
-          join: nil,
-          size: human_size(path),
-        }
+        paths << path
       end
+    end
+  end
+end
+
+class SkeletonGenerator < Generator
+  def generate
+    skeleton = {}
+
+    video_file_paths.each do |path|
+      filename = File.basename(path)
+      skeleton[filename] = {
+        split: nil,
+        join: nil,
+        size: human_size(path),
+      }
     end
     
     skeleton
@@ -74,6 +88,17 @@ class SkeletonGenerator
   
   private def human_size(path)
     (cached_file_size(path) / 1024 / 1024).round.to_s + ' MB'
+  end
+end
+
+class MetaGenerator < Generator
+  def generate
+    video_file_paths.each do |path|
+      key_frame_times = FfProbe.new(path).key_frame_times
+      open("#{path}.keyframes.json", 'w') do |f|
+        f << JSON.dump(key_frame_times)
+      end
+    end
   end
 end
 
@@ -161,7 +186,7 @@ class FfProbe
   
   attr_reader :path
   
-  private def info
+  def info
     @info ||= JSON.parse(get_output(
       'ffprobe', '-v', 'quiet', '-print_format', 'json',
       '-show_format', path))
@@ -202,9 +227,13 @@ if File.basename($0) == File.basename(__FILE__)
     payload = SkeletonGenerator.new(Dir.pwd).generate.deep_stringify_keys
     puts YAML.dump(payload)
     exit
+  elsif options[:build_meta]
+    MetaGenerator.new(Dir.pwd).generate
+    exit
   end
 
   config = YAML.load(File.open(ARGV.first).read)
 
   Splitter.new(config).run
 end
+
