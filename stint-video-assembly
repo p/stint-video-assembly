@@ -130,7 +130,7 @@ class Splitter
     
     config.each do |filename, subconfig|
       splits = subconfig['split']
-      if splits == 'none'
+      if splits.nil? || splits == 'none'
         puts "Ignore #{filename}"
         next
       end
