@@ -52,6 +52,10 @@ OptionParser.new do |opts|
   opts.on('-b', '--build-meta', 'Build video meta info') do
     options[:build_meta] = true
   end
+  
+  opts.on('-j', '--auto-join', 'Automatically join part files') do
+    options[:auto_join] = true
+  end
 end.parse!
 
 def video_file?(path)
@@ -303,4 +307,3 @@ if File.basename($0) == File.basename(__FILE__)
 
   Splitter.new(config).run
 end
-
